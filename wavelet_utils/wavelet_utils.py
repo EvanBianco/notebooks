@@ -77,8 +77,8 @@ def seismic_and_well_plot(seismic,
                           xlrange=(1598, 1001),
                           well_name='L-30',
                           gain=20,
-                          tstart=0, tstop=3.0,
-                          tidx1=0, tidx2=750,
+                          tstart=0, tstop=4.0,
+                          tidx1=0, tidx2=1000,
                           aspect=250.0,
                           log=None,
                           t_r=None,
@@ -87,19 +87,26 @@ def seismic_and_well_plot(seismic,
         x = ilx - xlrange[1]
 
         # make figure
-        fig = plt.figure(figsize=(10, 10))
+        fig = plt.figure(figsize=(15, 15))
         ax = fig.add_subplot(111)
-        # plot seismic
+        # PLOT SEISMIC
         ax.imshow(norm(seismic)[tidx1:tidx2, :], cmap='Greys', aspect=aspect,
                   clim=(-0.5, 0.5),
                   extent=[xlrange[1], xlrange[0], tstop, tstart])
-        # plot well
+        # PLOT WELLS
         ax.axvline(ilx, color='k', lw=0.25)
         # gained plot of impedance
         if log is not None:
-            ax.plot(gain_imp * (norm(log[1:])) + ilx, t_r, 'k', lw=0.5)
-            ax.text(ilx, 3.0, s=r'$\rho V_{P}$',
+            log = gain_imp * (log)
+            ax.plot(-log + ilx, t_r, 'k', lw=0.5)
+            ax.fill_betweenx(t_r, ilx - log, ilx,
+                             log > 0.0, color='k', alpha=0.5)
+
+            ax.text(ilx, 3.25, s=r'$\rho V_{P}$',
                     ha='center', va='bottom', fontsize=14,
+                    bbox=dict(facecolor='white', alpha=1.0, lw=0.5))
+            ax.text(ilx, 3.35, s='Acoustic Impedance',
+                    ha='center', va='bottom', fontsize=10,
                     bbox=dict(facecolor='white', alpha=1.0, lw=0.5))
         # label at the top of well
         ax.text(ilx, 0, s=well_name, ha='center', va='top',
@@ -126,23 +133,40 @@ def in_ms(x):
 def get_faxis(signal, dt):
     return np.fft.fftfreq(len(signal), d=dt)
 
-def get_spectrum(data, x, dt, ilx, r=1, return_ax=True):
+def get_spectrum(data, x, dt, ilx, r=1, return_ax=True, phase=False):
     ntraces = data.shape[1]
     Ss = np.zeros(data.shape[0])
+    Ps = np.zeros(data.shape[0])
     for trace in data[:, x - r: x + r + 1].T:
         Ss += abs(np.fft.fft(trace))
+        Ps += np.angle(np.fft.fft(trace))
     Ss /= ntraces
+    Ps /= ntraces
     s = data[:, x]
     faxis = get_faxis(s, dt)
     Y = np.log10(Ss[0:len(faxis) // 2])  # power spectrum
-    fig = plt.figure(figsize=(10,5))
+
+    # MAKE FIG
+    fig = plt.figure(figsize=(16,5))
+    # Power
     ax = fig.add_subplot(121)
     ax.plot(faxis[:len(faxis)//2], Y,'m', lw=1)
     ax.set_xlabel('frequency [Hz]', fontsize=12)
     ax.set_ylabel('power [dB]', fontsize=12)
     ax.grid()
     ax.set_title('traces %i to %i' % (ilx - r, ilx + r))
-    if return_ax:
+    # Phase
+    if phase:
+        ax2 = fig.add_subplot(122)
+        ax2.plot(faxis[:len(faxis)//2], Ps[:len(Ps)//2], 'm', lw=1)
+        ax2.set_xlabel('frequency [Hz]', fontsize=12)
+        ax2.set_ylabel('power [dB]', fontsize=12)
+        ax2.grid()
+        ax2.set_title('traces %i to %i' % (ilx - r, ilx + r))
+
+    if return_ax and phase==True:
+        return Ss, ax, ax2
+    elif return_ax:
         return Ss, ax
     else:
         return Ss
@@ -179,9 +203,8 @@ def plot_trace_segment(data, x, t, dt, w, tw, top_sample, bottom_sample, ax=None
     return ax, ax2
 
 
-def plot_wavelet(wavelet, tbase, ax=None, ylim=(-1.1, 1.1), xlabel=False, 
+def plot_wavelet(wavelet, dt, ax=None, ylim=(-1.1, 1.1), xlabel=False, 
                  norm=True, points=False, label=None):
-    dt = tbase[1] - tbase[0]
     if ax is None:
         fig = plt.figure(figsize=(2.5, 7))
         ax = fig.add_subplot(111)
@@ -189,10 +212,11 @@ def plot_wavelet(wavelet, tbase, ax=None, ylim=(-1.1, 1.1), xlabel=False,
         point = 'ko-'
     else:
         point = 'k'
-    ax.plot(tbase, wavelet, point, ms=4, label=label)
+    ax.plot(np.arange(0,len(wavelet))*dt, wavelet, point, ms=4, label=label)
     ax.axhline(0, color='k')
     if norm:
-        ax.set_xlim(-len(tbase) * dt / 2, len(tbase) * dt / 2)
+        #ax.set_xlim(-len(tbase) * dt / 2, len(tbase) * dt / 2)
+        #ax.set_xlim(-0.100, 0.100)
         ax.set_ylim(ylim[0], ylim[1])
         ax.set_yticks([-0.6, 0, 1.0])
     if xlabel:
